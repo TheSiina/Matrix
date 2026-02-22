@@ -1,6 +1,7 @@
 package com.example.matrix
 
-import androidx.compose.foundation.BorderStroke
+//صفحه تکنیک های مذاکره و نمایش لیست و سطح و ...
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,16 +128,24 @@ fun NegotiationLevelsScreen(navController: NavController) {
 
                 // ۲. لیست دروس و آیتم‌های آزمون
                 val items = getNegotiationData()
+
+// دقت کن که navController باید در ورودی اسکرین اصلی تعریف شده باشد
                 itemsIndexed(items) { index, item ->
                     when (item) {
-                        is NegotiationItem.Lesson -> LessonRow(item)
-                        is NegotiationItem.MidReview -> MidReviewRow(item)
+                        is NegotiationItem.Lesson -> {
+                            // حالا navController را به ردیف درس پاس می‌دهیم
+                            LessonRow(lesson = item, navController = navController)
+                        }
+                        is NegotiationItem.MidReview -> {
+                            MidReviewRow(item)
+                        }
                     }
+
                     if (index < items.lastIndex) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 85.dp),
-                            thickness = 0.8.dp, // کمی ضخیم‌تر
-                            color = GoldClassic.copy(alpha = 0.25f) // پررنگ‌تر شد
+                            thickness = 0.8.dp,
+                            color = GoldClassic.copy(alpha = 0.25f)
                         )
                     }
                 }
@@ -189,11 +198,14 @@ fun NegotiationLevelsScreen(navController: NavController) {
 }
 
 @Composable
-fun LessonRow(lesson: NegotiationItem.Lesson) {
+fun LessonRow(lesson: NegotiationItem.Lesson, navController: NavController) { // اضافه شدن نویگیتور
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* انتقال به صفحه محتوای درس */ }
+            .clickable {
+                // نویگیت به صفحه جزئیات با پاس دادن عنوان درس
+                navController.navigate("lesson_detail/${lesson.title}")
+            }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -213,13 +225,12 @@ fun LessonRow(lesson: NegotiationItem.Lesson) {
             Text("گام ${lesson.id}", fontSize = 10.sp, color = GoldClassic, letterSpacing = 1.sp)
             Text(lesson.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = SoftWhite)
 
-            // نمایش کلمه رایگان زیر تایتل (مشابه لرنیت)
             if (lesson.isFree) {
                 Text("رایگان", color = GoldClassic, fontSize = 11.sp, fontWeight = FontWeight.Light)
             }
         }
 
-        // آیکون دانلود برای همه (جایگزین قفل شد)
+        // آیکون دانلود
         Icon(
             imageVector = Icons.Default.FileDownload,
             contentDescription = "Download",
@@ -265,11 +276,11 @@ fun MidReviewRow(review: NegotiationItem.MidReview) {
 fun getNegotiationData() = listOf(
     NegotiationItem.Lesson(1, "استراتژی لنگر انداختن", GoldClassic, true),
     NegotiationItem.Lesson(2, "سکوت تاکتیکی", GoldClassic, true),
-    NegotiationItem.Lesson(3, "محدودیت زمانی", GoldClassic),
-    NegotiationItem.Lesson(4, "روانشناسی تضاد", GoldClassic),
-    NegotiationItem.Lesson(5, "بستن قرارداد", GoldClassic),
+    NegotiationItem.Lesson(3, "محدودیت زمانی", GoldClassic,false),
+    NegotiationItem.Lesson(4, "روانشناسی تضاد", GoldClassic,false),
+    NegotiationItem.Lesson(5, "بستن قرارداد", GoldClassic,false),
     NegotiationItem.MidReview(1, "آزمون ارزیابی سطح بقا", 0),
-    NegotiationItem.Lesson(6, "زبان بدن قدرتمند", GoldClassic)
+    NegotiationItem.Lesson(6, "زبان بدن قدرتمند", GoldClassic,false)
 )
 
 sealed class NegotiationItem {

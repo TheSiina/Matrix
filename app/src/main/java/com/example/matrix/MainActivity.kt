@@ -91,7 +91,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-
 // --- پالت رنگی لوکس ماتریکس ---
 val DeepNavy = Color(0xFF0A0E1A)
 val GoldClassic = Color(0xFFD4AF37)
