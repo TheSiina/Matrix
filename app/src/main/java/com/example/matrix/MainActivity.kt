@@ -1,6 +1,7 @@
 package com.example.matrix
 
 import StrategyRoomScreen
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -85,11 +86,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.util.Log
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 // --- پالت رنگی لوکس ماتریکس ---
 val DeepNavy = Color(0xFF0A0E1A)
@@ -99,14 +104,18 @@ val CardBg = Color(0xFF161B29)
 val GrayText = Color(0xFFB0B0B0)
 
 class MainActivity : ComponentActivity() {
+    // تابع کمکی برای خواندن فایل
+    fun getJsonFromAssets(context: Context, fileName: String): String {
+        return context.assets.open(fileName).bufferedReader().use { it.readText() }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ۱. ساخت ریپازیتوری
         val repository = JobRepository(applicationContext)
 
         setContent {
-            // ۲. ساخت ویومدل با استفاده از Factory (برای اینکه ریپازیتوری را بشناسد)
+            // ۱. ویومدل مشاغل (موجود)
             val jobViewModel: JobViewModel = viewModel(
                 factory = object : ViewModelProvider.Factory {
                     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -115,10 +124,21 @@ class MainActivity : ComponentActivity() {
                 }
             )
 
+            // ۲. ویومدل آزمون (جدید و اصولی)
+            val negViewModel: NegotiationViewModel = viewModel()
+            val context = LocalContext.current
+
+            LaunchedEffect(Unit) {
+                try {
+                    val jsonData = getJsonFromAssets(context, "negotiation_data.json")
+                    negViewModel.loadData(jsonData) // نام تابع اصلاح شد
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 val navController = rememberNavController()
-
-                // وضعیت شغل انتخاب شده برای جزییات
                 var selectedJob by remember { mutableStateOf<Job?>(null) }
 
                 Surface(modifier = Modifier.fillMaxSize(), color = DeepNavy) {
@@ -132,10 +152,9 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable("job_bank") {
-                            // ۳. پاس دادن لیست مشاغل از ویومدل به صفحه بانک مشاغل
                             JobsBankScreen(
-                                jobs = jobViewModel.jobs, // لیست مشاغل که از جیسون خوانده شده
-                                isLoading = jobViewModel.isLoading, // وضعیت لودینگ
+                                jobs = jobViewModel.jobs,
+                                isLoading = jobViewModel.isLoading,
                                 navController = navController,
                                 onJobClick = { job ->
                                     selectedJob = job
@@ -152,28 +171,66 @@ class MainActivity : ComponentActivity() {
                                     onBack = { navController.navigateUp() },
                                     onStartQuiz = { navController.navigate("quiz") }
                                 )
-                            } else {
-                                LaunchedEffect(Unit) {
-                                    navController.navigate("job_bank") {
-                                        popUpTo("dashboard") { inclusive = false }
-                                    }
-                                }
                             }
                         }
 
+                        composable("exam_screen/{levelName}") { backStackEntry ->
+                            val levelName = backStackEntry.arguments?.getString("levelName") ?: "سطح مقدماتی 1"
+
+                            // فیلتر کردن سوالات بر اساس سطح انتخابی
+                            val filteredQuestions = negViewModel.finalExamQuestions.value.filter {
+                                it.level.trim() == levelName.trim()
+                            }
+
+                            ExamScreen(
+                                questions = filteredQuestions,
+                                navController = navController,
+                                onScoreSaved = { finalScore ->
+                                    val prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE)
+                                    // ذخیره امتیاز با کلید مخصوص هر سطح (مثلاً score_مقدماتی_2)
+                                    val keySuffix = levelName.replace("سطح ", "").replace(" ", "_")
+                                    prefs.edit().putInt("score_$keySuffix", finalScore).apply()
+                                }
+                            )
+                        }
+
+                        // سایر مسیرهای شما بدون تغییر...
                         composable("quiz") {
                             val jobForQuiz = remember { selectedJob }
                             if (jobForQuiz != null) {
-                                QuizScreen(job = jobForQuiz) {
-                                    navController.popBackStack()
-                                }
+                                QuizScreen(job = jobForQuiz) { navController.popBackStack() }
                             }
                         }
 
-                        composable("strategy_room") {
-                            StrategyRoomScreen(navController = navController)
-                        }
+                        composable("strategy_room") { StrategyRoomScreen(navController = navController) }
+
                         composable("negotiation_levels") { NegotiationLevelsScreen(navController) }
+
+                        composable("lesson_content/{lessonId}/{lessonTitle}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            val lessonTitle = backStackEntry.arguments?.getString("lessonTitle") ?: ""
+                            LessonContentScreen(lessonId, lessonTitle, navController)
+                        }
+
+                        composable("lesson_detail_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            TechniqueDetailScreen(lessonId, navController)
+                        }
+
+                        composable("real_story_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            RealStoryScreen(lessonId, navController)
+                        }
+
+                        composable("scenario_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            ScenarioScreen(lessonId, navController)
+                        }
+
+                        composable("action_plan_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: "1"
+                            ActionPlanScreen(lessonId, navController)
+                        }
                     }
                 }
             }
@@ -517,7 +574,6 @@ fun MatrixBottomNav() {
         NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.Person, null) }, label = { Text("پروفایل", fontSize = 11.sp) }, colors = navColor)
     }
 }
-
 
 @Composable
 fun JobDetailScreen(job: Job, onBack: () -> Unit, onStartQuiz: (Job) -> Unit) {

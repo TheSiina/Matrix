@@ -2,6 +2,7 @@ package com.example.matrix
 
 //صفحه تکنیک های مذاکره و نمایش لیست و سطح و ...
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,18 +23,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.gson.JsonParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NegotiationLevelsScreen(navController: NavController) {
-    val levels = listOf("سطح مقدماتی ۱", "سطح مقدماتی ۲", "سطح متوسط ۱", "سطح متوسط ۲", "سطح پیشرفته")
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("user_settings", Context.MODE_PRIVATE) }
+    // این لیست باید دقیقاً مشابه مقدار level در JSON باشد
+    val levels = listOf("سطح مقدماتی 1", "سطح مقدماتی 2", "سطح متوسط 1", "سطح متوسط 2", "سطح پیشرفته")
     var isLevelMenuVisible by remember { mutableStateOf(false) }
-    var selectedLevel by remember { mutableStateOf(levels[0]) }
+    var selectedLevel by remember {
+        mutableStateOf(prefs.getString("last_selected_level", "سطح مقدماتی 1") ?: "سطح مقدماتی 1")
+    }
+
+    // ۳. هر بار که سطح تغییر کرد، آن را ذخیره کن
+    val items = remember(selectedLevel, navController.currentBackStackEntry) {
+        // ذخیره در لحظه تغییر
+        prefs.edit().putString("last_selected_level", selectedLevel).apply()
+        loadLessonsByLevel(context, selectedLevel)
+    }
 
     Scaffold(
         containerColor = DeepNavy,
@@ -126,22 +141,28 @@ fun NegotiationLevelsScreen(navController: NavController) {
                     }
                 }
 
-                // ۲. لیست دروس و آیتم‌های آزمون
-                val items = getNegotiationData()
-
-// دقت کن که navController باید در ورودی اسکرین اصلی تعریف شده باشد
                 itemsIndexed(items) { index, item ->
                     when (item) {
                         is NegotiationItem.Lesson -> {
-                            // حالا navController را به ردیف درس پاس می‌دهیم
                             LessonRow(lesson = item, navController = navController)
                         }
                         is NegotiationItem.MidReview -> {
-                            MidReviewRow(item)
+                            // مستقیماً روی خودِ کامپوننت کلیک را اعمال کن
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        println("Navigate to Exam Screen") // برای تست در Logcat
+                                        navController.navigate("exam_screen/$selectedLevel")                                    }
+                            ) {
+                                MidReviewRow(item)
+                            }
                         }
                     }
 
-                    if (index < items.lastIndex) {
+                    // جداکننده (Divider) را فقط زمانی نمایش بده که آیتم بعدی یک "درس" باشد
+                    // یا اگر می‌خواهی بعد از آزمون هم خط بیفتد، همان شرط قبلی خودت کافی است
+                    if (index < items.lastIndex && item is NegotiationItem.Lesson) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 85.dp),
                             thickness = 0.8.dp,
@@ -203,9 +224,7 @@ fun LessonRow(lesson: NegotiationItem.Lesson, navController: NavController) { //
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
-                // نویگیت به صفحه جزئیات با پاس دادن عنوان درس
-                navController.navigate("lesson_detail/${lesson.title}")
-            }
+                navController.navigate("lesson_content/${lesson.id}/${lesson.title}")            }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -216,7 +235,7 @@ fun LessonRow(lesson: NegotiationItem.Lesson, navController: NavController) { //
                 .border(1.dp, GoldClassic.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text("${lesson.id}", color = GoldClassic, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(lesson.id, color = GoldClassic, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         }
 
         Spacer(modifier = Modifier.width(20.dp))
@@ -245,45 +264,130 @@ fun MidReviewRow(review: NegotiationItem.MidReview) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .background(CardBg.copy(alpha = 0.5f))
-            .clickable { /* شروع آزمون */ }
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp) // فاصله بیشتر از لبه‌ها
+            .heightIn(min = 120.dp) // بلندتر و پهن‌تر شدن ردیف
+            .background(
+                // استفاده از گرادینت برای متمایز شدن از ردیف‌های ساده
+                brush = Brush.verticalGradient(
+                    colors = listOf(CardBg, DeepNavy)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(listOf(GoldClassic, Color.Transparent)),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .padding(20.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(54.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // بخش پیشرفت با استایل بزرگتر
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(70.dp)) {
                 CircularProgressIndicator(
                     progress = { review.progress / 100f },
                     color = GoldClassic,
-                    trackColor = DeepNavy,
-                    strokeWidth = 3.dp
+                    trackColor = DeepNavy.copy(alpha = 0.5f),
+                    strokeWidth = 5.dp, // خط ضخیم‌تر
+                    modifier = Modifier.fillMaxSize()
                 )
-                Text("${review.progress}%", color = GoldClassic, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "${review.progress}%",
+                    color = GoldClassic,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
             }
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.width(24.dp))
 
+            // بخش متن‌ها
             Column(modifier = Modifier.weight(1f)) {
-                Text("ارزیابی استراتژیک", fontSize = 10.sp, color = GoldClassic)
-                Text(review.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = SoftWhite)
+                Text(
+                    "ارزیابی نهایی سطح شما", // تیتر متفاوت
+                    fontSize = 12.sp,
+                    color = GoldClassic,
+                    letterSpacing = 1.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    review.title,
+                    fontSize = 18.sp, // فونت درشت‌تر
+                    fontWeight = FontWeight.Black,
+                    color = SoftWhite
+                )
+                Text(
+                    "تسلط بر ۲۰ تکنیک پایه",
+                    fontSize = 11.sp,
+                    color = GrayText,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
 
-            Icon(Icons.Default.FileDownload, null, tint = GrayText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
+            // آیکون متفاوت برای آزمون
+            Icon(
+                imageVector = Icons.Default.EmojiEvents, // آیکون جام برای جذابیت
+                contentDescription = null,
+                tint = GoldClassic,
+                modifier = Modifier.size(32.dp)
+            )
         }
     }
 }
 
-fun getNegotiationData() = listOf(
-    NegotiationItem.Lesson(1, "استراتژی لنگر انداختن", GoldClassic, true),
-    NegotiationItem.Lesson(2, "سکوت تاکتیکی", GoldClassic, true),
-    NegotiationItem.Lesson(3, "محدودیت زمانی", GoldClassic,false),
-    NegotiationItem.Lesson(4, "روانشناسی تضاد", GoldClassic,false),
-    NegotiationItem.Lesson(5, "بستن قرارداد", GoldClassic,false),
-    NegotiationItem.MidReview(1, "آزمون ارزیابی سطح بقا", 0),
-    NegotiationItem.Lesson(6, "زبان بدن قدرتمند", GoldClassic,false)
-)
+fun loadLessonsByLevel(context: Context, levelName: String): List<NegotiationItem> {
+    return try {
+        val jsonString = context.assets.open("negotiation_data.json").bufferedReader().use { it.readText() }
+        val rootObject = JsonParser.parseString(jsonString).asJsonObject
+        val lessonsArray = rootObject.getAsJsonArray("negotiation_items")
+        val items = mutableListOf<NegotiationItem>()
+
+        // فیلتر کردن بر اساس سطح
+        val targetLevel = levelName.replace("سطح ", "").trim()
+        val filteredLessons = lessonsArray.filter {
+            it.asJsonObject.get("level").asString.trim() == targetLevel
+        }
+
+        filteredLessons.forEachIndexed { index, element ->
+            val obj = element.asJsonObject
+            items.add(NegotiationItem.Lesson(
+                id = obj.get("lesson_id").asString,
+                title = obj.get("lesson_title").asString,
+                isFree = obj.get("lesson_id").asString.toInt() <= 2
+            ))
+        }
+
+        // --- اصلاح بخش امتیاز: داینامیک کردن کلید ---
+        val prefs = context.getSharedPreferences("user_data", Context.MODE_PRIVATE)
+        // کلید اختصاصی برای هر سطح (مثلاً: score_مقدماتی_1 یا score_مقدماتی_2)
+        val dynamicKey = "score_${targetLevel.replace(" ", "_")}"
+        val savedScore = prefs.getInt(dynamicKey, 0)
+
+        if (items.isNotEmpty()) {
+            items.add(
+                NegotiationItem.MidReview(
+                    id = 100,
+                    title = "ارزیابی جامع",
+                    progress = savedScore
+                )
+            )
+        }
+        items
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyList()
+    }
+}
 
 sealed class NegotiationItem {
-    data class Lesson(val id: Int, val title: String, val color: Color, val isFree: Boolean = false) : NegotiationItem()
+    data class Lesson(
+        val id: String, // از Int به String تغییر دادیم تا با lesson_id در جیسون ست شود
+        val title: String,
+        val isFree: Boolean = false
+    ) : NegotiationItem()
+
     data class MidReview(val id: Int, val title: String, val progress: Int = 0) : NegotiationItem()
 }
