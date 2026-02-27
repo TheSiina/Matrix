@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WorkHistory
 import androidx.compose.material3.Card
@@ -60,6 +62,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -74,11 +78,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -230,6 +238,74 @@ class MainActivity : ComponentActivity() {
                         composable("action_plan_view/{lessonId}") { backStackEntry ->
                             val lessonId = backStackEntry.arguments?.getString("lessonId") ?: "1"
                             ActionPlanScreen(lessonId, navController)
+                        }
+
+                        // --- مسیرهای اختصاصی تکنیک‌های فروش ---
+                        composable("sales_levels") { SalesLevelsScreen(navController) }
+
+                        composable("sales_lesson_content/{lessonId}/{lessonTitle}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            val lessonTitle = backStackEntry.arguments?.getString("lessonTitle") ?: ""
+                            SalesLessonContentScreen(lessonId, lessonTitle, navController)
+                        }
+
+                        composable("sales_lesson_detail_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            SalesTechniqueDetailScreen(lessonId, navController)
+                        }
+
+                        composable("sales_real_story_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            SalesRealStoryScreen(lessonId, navController)
+                        }
+
+                        composable("sales_scenario_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            SalesScenarioScreen(lessonId, navController)
+                        }
+
+                        composable("sales_action_plan_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: "1"
+                            SalesActionPlanScreen(lessonId, navController)
+                        }
+
+                        composable("sales_exam_screen/{levelName}") { backStackEntry ->
+                            val levelName = backStackEntry.arguments?.getString("levelName") ?: "سطح مقدماتی 1"
+                            SalesExamScreen(levelName, navController)
+                        }
+
+                        // --- مسیرهای اختصاصی تکنیک‌های زبان بدن ---
+                        composable("body_levels") { BodyLanguageLevelsScreen(navController) }
+
+                        composable("body_lesson_content/{lessonId}/{lessonTitle}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            val lessonTitle = backStackEntry.arguments?.getString("lessonTitle") ?: ""
+                            BodyLessonContentScreen(lessonId, lessonTitle, navController)
+                        }
+
+                        composable("body_lesson_detail_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            BodyTechniqueDetailScreen(lessonId, navController)
+                        }
+
+                        composable("body_real_story_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            BodyRealStoryScreen(lessonId, navController)
+                        }
+
+                        composable("body_scenario_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: ""
+                            BodyScenarioScreen(lessonId, navController)
+                        }
+
+                        composable("body_action_plan_view/{lessonId}") { backStackEntry ->
+                            val lessonId = backStackEntry.arguments?.getString("lessonId") ?: "1"
+                            BodyActionPlanScreen(lessonId, navController)
+                        }
+
+                        composable("body_exam_screen/{levelName}") { backStackEntry ->
+                            val levelName = backStackEntry.arguments?.getString("levelName") ?: "سطح مقدماتی 1"
+                            BodyExamScreen(levelName, navController)
                         }
                     }
                 }
@@ -432,11 +508,27 @@ fun JobsBankScreen(
         listOf("همه", "دیجیتال", "مالی", "فنی", "محتوا", "سلامت", "انرژی", "حقوقی", "مدیریت", "هنر و زیبایی", "طراحی")
     }
     var selectedCategory by remember { mutableStateOf("همه") }
+    var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
-    // فیلتر کردن بر اساس لیست ورودی (jobs)
-    val filteredJobs = remember(selectedCategory, jobs) {
-        if (selectedCategory == "همه") jobs
-        else jobs.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+    // فیلتر کردن بر اساس لیست ورودی (jobs) + جستجو
+    val filteredJobs = remember(selectedCategory, searchQuery, jobs) {
+        val baseList = if (selectedCategory == "همه") {
+            jobs
+        } else {
+            jobs.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        }
+
+        if (searchQuery.isBlank()) {
+            baseList
+        } else {
+            val query = searchQuery.trim()
+            baseList.filter { job ->
+                job.title.contains(query, ignoreCase = true) ||
+                        job.category.contains(query, ignoreCase = true) ||
+                        job.about.contains(query, ignoreCase = true)
+            }
+        }
     }
 
     Scaffold(
@@ -508,6 +600,69 @@ fun JobsBankScreen(
                     }
                 }
 
+                // فیلد جستجو با تم مشکی و طلایی
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    singleLine = true,
+                    placeholder = {
+                        Text(
+                            text = "جستجوی شغل بر اساس عنوان یا دسته‌بندی",
+                            color = GrayText,
+                            fontSize = 12.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = GoldClassic
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "پاک کردن جستجو",
+                                tint = GrayText,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        searchQuery = ""
+                                        focusManager.clearFocus()
+                                    }
+                            )
+                        }
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = CardBg,
+                        unfocusedContainerColor = CardBg,
+                        disabledContainerColor = CardBg,
+                        focusedIndicatorColor = GoldClassic,
+                        unfocusedIndicatorColor = GrayText.copy(alpha = 0.5f),
+                        cursorColor = GoldClassic,
+                        focusedTextColor = SoftWhite,
+                        unfocusedTextColor = SoftWhite,
+                        focusedLeadingIconColor = GoldClassic,
+                        unfocusedLeadingIconColor = GoldClassic
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Search
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            focusManager.clearFocus()
+                        }
+                    )
+                )
+
                 // لیست مشاغل فیلتر شده
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -521,8 +676,30 @@ fun JobsBankScreen(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    items(items = filteredJobs, key = { it.id }) { job -> // بهتره کلید بر اساس id باشه
-                        JobCardItem(job = job, onClick = { onJobClick(job) })
+
+                    if (filteredJobs.isEmpty() && searchQuery.isNotBlank()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "موردی یافت نشد",
+                                    color = GrayText,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(items = filteredJobs, key = { it.id }) { job -> // بهتره کلید بر اساس id باشه
+                            JobCardItem(
+                                job = job,
+                                onClick = { onJobClick(job) },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(20.dp)) }
                 }
@@ -532,9 +709,9 @@ fun JobsBankScreen(
 }
 
 @Composable
-fun JobCardItem(job: Job, onClick: () -> Unit) {
+fun JobCardItem(job: Job, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clickable { onClick() },

@@ -141,7 +141,8 @@ fun TechniquesGrid(navController: NavController) { // اضافه شدن navContr
                             // مدیریت کلیک برای هر کارت
                             when (item.first) {
                                 "تکنیک‌های مذاکره" -> navController.navigate("negotiation_levels")
-                                "تکنیک‌های فروش" -> { /* navController.navigate("sales_screen") */ }
+                                "تکنیک‌های فروش" -> navController.navigate("sales_levels")
+                                "تکنیک‌های زبان بدن" -> navController.navigate("body_levels")
                             }
                         }
                     )
